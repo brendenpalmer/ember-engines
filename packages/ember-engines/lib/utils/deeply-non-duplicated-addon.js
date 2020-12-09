@@ -8,21 +8,15 @@
  * @param {EmberAddon} dedupedAddon
  * @param {String} treeName
  */
-module.exports = function deeplyNonDuplicatedAddon(hostAddons, dedupedAddon, treeName) {
+module.exports = function deeplyNonDuplicatedAddon(hostAddons, dedupedAddon, treeName, { _dedupedAddons = new Set() } = {}) {
   if (dedupedAddon.addons.length === 0) {
-    return;
+    return _dedupedAddons;
   }
 
-  dedupedAddon._orginalAddons = dedupedAddon.addons;
-  dedupedAddon.addons = dedupedAddon.addons.filter(addon => {
+  dedupedAddon.addons.filter(addon => {
     // nested lazy engine will have it's own deeplyNonDuplicatedAddon, just keep it here
     if (addon.lazyLoading && addon.lazyLoading.enabled) {
       return true;
-    }
-
-    if (addon.addons.length > 0) {
-      addon._orginalAddons = addon.addons;
-      deeplyNonDuplicatedAddon(hostAddons, addon, treeName);
     }
 
     let hostAddon = hostAddons[addon.name];
@@ -40,6 +34,14 @@ module.exports = function deeplyNonDuplicatedAddon(hostAddons, dedupedAddon, tre
       }
     }
 
+    if (addon.addons.length > 0) {
+      deeplyNonDuplicatedAddon(hostAddons, addon, treeName, { _dedupedAddons });
+    }
+
     return true;
-  });
+  }).forEach(addon => {
+    _dedupedAddons.add(addon);
+  })
+
+  return _dedupedAddons;
 }

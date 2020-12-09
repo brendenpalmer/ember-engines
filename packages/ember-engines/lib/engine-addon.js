@@ -14,7 +14,6 @@ const Addon = require('ember-cli/lib/models/addon');
 const { memoize } = require('./utils/memoize');
 const maybeMergeTrees = require('./utils/maybe-merge-trees');
 const deeplyNonDuplicatedAddon = require('./utils/deeply-non-duplicated-addon');
-const restoreOriginalAddons = require('./utils/restore-original-addons');
 const p = require('ember-cli-preprocess-registry/preprocessors');
 const shouldCompactReexports = require('./utils/should-compact-reexports');
 const appendCompactReexportsIfNeeded = require('./utils/append-compact-reexports-if-needed');
@@ -373,9 +372,9 @@ module.exports = {
         let trees
 
         try {
-          deeplyNonDuplicatedAddon(hostAddons, this, treeName);
+          const addons = Array.from(deeplyNonDuplicatedAddon(hostAddons, this, treeName));
 
-          trees = this.addons
+          trees = addons
             .filter(addon => {
               if (!addon[methodName]) {
                 // no method to call
@@ -384,10 +383,20 @@ module.exports = {
               return true;
             })
             .map(addon => {
-              return addon[methodName].apply(addon, invokeArguments);
+              const eachAddonInvoke = addon.eachAddonInvoke;
+
+              // `addons` should contain all nested addons; `ember-engines` is responsible for directly
+              // calling all nested addons `treeFor` (including those from nested addons)
+              addon.eachAddonInvoke = () => [];
+              const treeForReturn = addon[methodName].apply(addon, invokeArguments);
+
+              // restore the original `eachAddonInvoke` method
+              addon.eachAddonInvoke = eachAddonInvoke;
+
+              return treeForReturn;
             });
         } finally {
-          restoreOriginalAddons(this);
+          // do nothing for now
         }
 
         return trees
